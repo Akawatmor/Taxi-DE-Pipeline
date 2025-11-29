@@ -541,6 +541,31 @@ ORDER BY trip_count DESC;
 
 ---
 
+## 🎬 Demo & Actual Results
+
+### 📹 Demo Video
+
+[![Demo Video](https://img.shields.io/badge/▶️_Watch_Demo-Pipeline_Execution-red?style=for-the-badge&logo=youtube)](https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4)
+
+**Demo Video:** [https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4](https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4)
+
+### 📊 Actual Pipeline Results (28 September Run)
+
+| Rank | Taxi Type | Trip Count | Percentage |
+|------|-----------|------------|------------|
+| 🥇 1 | **FHVHV** | **19,657,306** | **86.48%** |
+| 🥈 2 | Yellow | 2,756,703 | 12.13% |
+| 🥉 3 | FHV | 262,654 | 1.16% |
+| 4 | Green | 52,708 | 0.23% |
+
+### 🏆 Summary
+
+> **🚀 Top Taxi Type: FHVHV (Uber/Lyft) with 19,657,306 rides (86.48%)**
+>
+> High Volume For-Hire Vehicles (FHVHV) ซึ่งรวม Uber และ Lyft ครองส่วนแบ่งตลาดมากที่สุดใน NYC ในเดือนมกราคม 2024 คิดเป็นสัดส่วนถึง 86.48% ของการเดินทางทั้งหมด!
+
+---
+
 ## 🔍 Monitoring & Troubleshooting
 
 ### CloudWatch Logs
