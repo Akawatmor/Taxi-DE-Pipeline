@@ -550,6 +550,8 @@ ORDER BY trip_count DESC;
   Your browser does not support the video tag.
 </video>
 
+https://github.com/user-attachments/assets/f9e1d414-8a46-46d2-9850-6ae73b934764
+
 > 📎 **Direct Link:** [https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4](https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4)
 
 ### 📊 Actual Pipeline Results (28 September Run)
