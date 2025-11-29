@@ -1,0 +1,130 @@
+{
+    "Comment": "NYC Taxi Data ETL Pipeline Workflow - Visual Reference",
+    "StartAt": "ProcessAllTaxiTypes",
+    "States": {
+        "ProcessAllTaxiTypes": {
+            "Type": "Parallel",
+            "Comment": "Process all 4 taxi types in parallel for efficiency",
+            "Branches": [
+                {
+                    "StartAt": "RunYellowTaxiETL",
+                    "States": {
+                        "RunYellowTaxiETL": {
+                            "Type": "Task",
+                            "Comment": "Clean Yellow Taxi data: remove duplicates, filter dates, remove outliers",
+                            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                            "Parameters": {
+                                "JobName": "taxi-pipeline-yellow-taxi-etl"
+                            },
+                            "End": true
+                        }
+                    }
+                },
+                {
+                    "StartAt": "RunGreenTaxiETL",
+                    "States": {
+                        "RunGreenTaxiETL": {
+                            "Type": "Task",
+                            "Comment": "Clean Green Taxi data",
+                            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                            "Parameters": {
+                                "JobName": "taxi-pipeline-green-taxi-etl"
+                            },
+                            "End": true
+                        }
+                    }
+                },
+                {
+                    "StartAt": "RunFHVTaxiETL",
+                    "States": {
+                        "RunFHVTaxiETL": {
+                            "Type": "Task",
+                            "Comment": "Clean FHV data",
+                            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                            "Parameters": {
+                                "JobName": "taxi-pipeline-fhv-taxi-etl"
+                            },
+                            "End": true
+                        }
+                    }
+                },
+                {
+                    "StartAt": "RunFHVHVTaxiETL",
+                    "States": {
+                        "RunFHVHVTaxiETL": {
+                            "Type": "Task",
+                            "Comment": "Clean FHVHV data (Uber, Lyft)",
+                            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                            "Parameters": {
+                                "JobName": "taxi-pipeline-fhvhv-taxi-etl"
+                            },
+                            "End": true
+                        }
+                    }
+                }
+            ],
+            "Next": "MergeAllData"
+        },
+        "MergeAllData": {
+            "Type": "Task",
+            "Comment": "Merge all cleaned datasets into unified schema",
+            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+            "Parameters": {
+                "JobName": "taxi-pipeline-merge-data-etl"
+            },
+            "Next": "RunCrawler"
+        },
+        "RunCrawler": {
+            "Type": "Task",
+            "Comment": "Catalog merged data in Glue Data Catalog",
+            "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+            "Parameters": {
+                "Name": "taxi-pipeline-cleaned-data-crawler"
+            },
+            "Next": "WaitForCrawler"
+        },
+        "WaitForCrawler": {
+            "Type": "Wait",
+            "Seconds": 60,
+            "Next": "CheckCrawlerStatus"
+        },
+        "CheckCrawlerStatus": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:glue:getCrawler",
+            "Parameters": {
+                "Name": "taxi-pipeline-cleaned-data-crawler"
+            },
+            "Next": "IsCrawlerComplete"
+        },
+        "IsCrawlerComplete": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.Crawler.State",
+                    "StringEquals": "READY",
+                    "Next": "RunAthenaQuery"
+                },
+                {
+                    "Variable": "$.Crawler.State",
+                    "StringEquals": "RUNNING",
+                    "Next": "WaitForCrawler"
+                }
+            ],
+            "Default": "RunAthenaQuery"
+        },
+        "RunAthenaQuery": {
+            "Type": "Task",
+            "Comment": "Run aggregation query to count trips by taxi type",
+            "Resource": "arn:aws:states:::athena:startQueryExecution.sync",
+            "Parameters": {
+                "QueryString": "SELECT taxi_type, COUNT(*) as trip_count, ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage FROM taxi_pipeline_db.taxi_merged GROUP BY taxi_type ORDER BY trip_count DESC",
+                "WorkGroup": "taxi-pipeline-workgroup"
+            },
+            "Next": "PipelineComplete"
+        },
+        "PipelineComplete": {
+            "Type": "Succeed",
+            "Comment": "Pipeline completed successfully"
+        }
+    }
+}

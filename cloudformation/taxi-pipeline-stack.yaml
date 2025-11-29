@@ -1,0 +1,955 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  NYC Taxi Data Engineering Pipeline - Complete Infrastructure
+  Based on TLC Taxi Type Analysis (Jan 2024)
+  Designed for AWS Learner Lab Environment (uses existing LabRole)
+  
+  Pipeline: S3 → EventBridge → Step Functions → Glue ETL → Crawler → Athena → SageMaker
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: taxi-pipeline
+    Description: Environment name prefix for all resources
+    
+  DataMonth:
+    Type: String
+    Default: '2024-01'
+    Description: Data month to process (YYYY-MM format)
+
+  GlueJobTimeout:
+    Type: Number
+    Default: 60
+    Description: Timeout in minutes for Glue ETL jobs
+
+  # Learner Lab uses a pre-existing LabRole
+  LabRoleARN:
+    Type: String
+    Default: arn:aws:iam::754289373217:role/LabRole
+    Description: ARN of the existing LabRole in Learner Lab (update with your account ID if different)
+
+Resources:
+  #============================================================================
+  # S3 BUCKETS
+  #============================================================================
+  
+  # Raw Data Lake Bucket (Ingestion)
+  RawDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-raw-data-${AWS::AccountId}'
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Cleaned Data Bucket
+  CleanedDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-cleaned-data-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Athena Query Results Bucket
+  AthenaResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-athena-results-${AWS::AccountId}'
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldResults
+            Status: Enabled
+            ExpirationInDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Glue Scripts Bucket
+  GlueScriptsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-glue-scripts-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  #============================================================================
+  # GLUE DATA CATALOG
+  #============================================================================
+  
+  # Glue Database
+  TaxiDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: taxi_pipeline_db
+        Description: NYC Taxi Trip Data Database
+
+  #============================================================================
+  # GLUE ETL JOBS (Using LabRole)
+  #============================================================================
+  
+  # Yellow Taxi ETL Job
+  YellowTaxiETLJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub '${EnvironmentName}-yellow-taxi-etl'
+      Role: !Ref LabRoleARN
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub 's3://${GlueScriptsBucket}/scripts/yellow_taxi_etl.py'
+        PythonVersion: '3'
+      DefaultArguments:
+        '--job-language': python
+        '--job-bookmark-option': job-bookmark-enable
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--RAW_BUCKET': !Ref RawDataBucket
+        '--CLEANED_BUCKET': !Ref CleanedDataBucket
+        '--DATA_MONTH': !Ref DataMonth
+      GlueVersion: '4.0'
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+      Timeout: !Ref GlueJobTimeout
+      MaxRetries: 1
+      ExecutionProperty:
+        MaxConcurrentRuns: 3
+
+  # Green Taxi ETL Job
+  GreenTaxiETLJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub '${EnvironmentName}-green-taxi-etl'
+      Role: !Ref LabRoleARN
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub 's3://${GlueScriptsBucket}/scripts/green_taxi_etl.py'
+        PythonVersion: '3'
+      DefaultArguments:
+        '--job-language': python
+        '--job-bookmark-option': job-bookmark-enable
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--RAW_BUCKET': !Ref RawDataBucket
+        '--CLEANED_BUCKET': !Ref CleanedDataBucket
+        '--DATA_MONTH': !Ref DataMonth
+      GlueVersion: '4.0'
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+      Timeout: !Ref GlueJobTimeout
+      MaxRetries: 1
+      ExecutionProperty:
+        MaxConcurrentRuns: 3
+
+  # FHV Taxi ETL Job
+  FHVTaxiETLJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub '${EnvironmentName}-fhv-taxi-etl'
+      Role: !Ref LabRoleARN
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub 's3://${GlueScriptsBucket}/scripts/fhv_taxi_etl.py'
+        PythonVersion: '3'
+      DefaultArguments:
+        '--job-language': python
+        '--job-bookmark-option': job-bookmark-enable
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--RAW_BUCKET': !Ref RawDataBucket
+        '--CLEANED_BUCKET': !Ref CleanedDataBucket
+        '--DATA_MONTH': !Ref DataMonth
+      GlueVersion: '4.0'
+      WorkerType: G.1X
+      NumberOfWorkers: 2
+      Timeout: !Ref GlueJobTimeout
+      MaxRetries: 1
+      ExecutionProperty:
+        MaxConcurrentRuns: 3
+
+  # FHVHV Taxi ETL Job
+  FHVHVTaxiETLJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub '${EnvironmentName}-fhvhv-taxi-etl'
+      Role: !Ref LabRoleARN
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub 's3://${GlueScriptsBucket}/scripts/fhvhv_taxi_etl.py'
+        PythonVersion: '3'
+      DefaultArguments:
+        '--job-language': python
+        '--job-bookmark-option': job-bookmark-enable
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--RAW_BUCKET': !Ref RawDataBucket
+        '--CLEANED_BUCKET': !Ref CleanedDataBucket
+        '--DATA_MONTH': !Ref DataMonth
+      GlueVersion: '4.0'
+      WorkerType: G.2X
+      NumberOfWorkers: 4
+      Timeout: !Ref GlueJobTimeout
+      MaxRetries: 1
+      ExecutionProperty:
+        MaxConcurrentRuns: 3
+
+  # Merge All Data ETL Job
+  MergeDataETLJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: !Sub '${EnvironmentName}-merge-data-etl'
+      Role: !Ref LabRoleARN
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub 's3://${GlueScriptsBucket}/scripts/merge_data_etl.py'
+        PythonVersion: '3'
+      DefaultArguments:
+        '--job-language': python
+        '--job-bookmark-option': job-bookmark-disable
+        '--enable-metrics': 'true'
+        '--enable-continuous-cloudwatch-log': 'true'
+        '--CLEANED_BUCKET': !Ref CleanedDataBucket
+        '--DATA_MONTH': !Ref DataMonth
+      GlueVersion: '4.0'
+      WorkerType: G.2X
+      NumberOfWorkers: 4
+      Timeout: !Ref GlueJobTimeout
+      MaxRetries: 1
+      ExecutionProperty:
+        MaxConcurrentRuns: 3
+
+  #============================================================================
+  # GLUE CRAWLER (Using LabRole)
+  #============================================================================
+  
+  # Crawler for Cleaned Data
+  CleanedDataCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: !Sub '${EnvironmentName}-cleaned-data-crawler'
+      Role: !Ref LabRoleARN
+      DatabaseName: !Ref TaxiDatabase
+      Targets:
+        S3Targets:
+          - Path: !Sub 's3://${CleanedDataBucket}/merged/'
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: LOG
+      TablePrefix: 'taxi_'
+      Configuration: |
+        {
+          "Version": 1.0,
+          "Grouping": {
+            "TableGroupingPolicy": "CombineCompatibleSchemas"
+          }
+        }
+
+  #============================================================================
+  # ATHENA WORKGROUP
+  #============================================================================
+  
+  AthenaWorkgroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: !Sub '${EnvironmentName}-workgroup'
+      Description: Workgroup for Taxi Pipeline queries
+      State: ENABLED
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: true
+        ResultConfiguration:
+          OutputLocation: !Sub 's3://${AthenaResultsBucket}/query-results/'
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
+
+  #============================================================================
+  # STEP FUNCTIONS STATE MACHINE (Using LabRole)
+  #============================================================================
+  
+  TaxiPipelineStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub '${EnvironmentName}-etl-workflow'
+      RoleArn: !Ref LabRoleARN
+      Definition:
+        Comment: NYC Taxi Data ETL Pipeline Workflow
+        StartAt: ProcessAllTaxiTypes
+        States:
+          ProcessAllTaxiTypes:
+            Type: Parallel
+            Branches:
+              - StartAt: RunYellowTaxiETL
+                States:
+                  RunYellowTaxiETL:
+                    Type: Task
+                    Resource: arn:aws:states:::glue:startJobRun.sync
+                    Parameters:
+                      JobName: !Ref YellowTaxiETLJob
+                    End: true
+                    Catch:
+                      - ErrorEquals: ['States.ALL']
+                        Next: YellowETLFailed
+                  YellowETLFailed:
+                    Type: Pass
+                    Result: 'Yellow ETL Failed'
+                    End: true
+              - StartAt: RunGreenTaxiETL
+                States:
+                  RunGreenTaxiETL:
+                    Type: Task
+                    Resource: arn:aws:states:::glue:startJobRun.sync
+                    Parameters:
+                      JobName: !Ref GreenTaxiETLJob
+                    End: true
+                    Catch:
+                      - ErrorEquals: ['States.ALL']
+                        Next: GreenETLFailed
+                  GreenETLFailed:
+                    Type: Pass
+                    Result: 'Green ETL Failed'
+                    End: true
+              - StartAt: RunFHVTaxiETL
+                States:
+                  RunFHVTaxiETL:
+                    Type: Task
+                    Resource: arn:aws:states:::glue:startJobRun.sync
+                    Parameters:
+                      JobName: !Ref FHVTaxiETLJob
+                    End: true
+                    Catch:
+                      - ErrorEquals: ['States.ALL']
+                        Next: FHVETLFailed
+                  FHVETLFailed:
+                    Type: Pass
+                    Result: 'FHV ETL Failed'
+                    End: true
+              - StartAt: RunFHVHVTaxiETL
+                States:
+                  RunFHVHVTaxiETL:
+                    Type: Task
+                    Resource: arn:aws:states:::glue:startJobRun.sync
+                    Parameters:
+                      JobName: !Ref FHVHVTaxiETLJob
+                    End: true
+                    Catch:
+                      - ErrorEquals: ['States.ALL']
+                        Next: FHVHVETLFailed
+                  FHVHVETLFailed:
+                    Type: Pass
+                    Result: 'FHVHV ETL Failed'
+                    End: true
+            Next: MergeAllData
+          MergeAllData:
+            Type: Task
+            Resource: arn:aws:states:::glue:startJobRun.sync
+            Parameters:
+              JobName: !Ref MergeDataETLJob
+            Next: RunCrawler
+            Catch:
+              - ErrorEquals: ['States.ALL']
+                Next: PipelineFailed
+          RunCrawler:
+            Type: Task
+            Resource: arn:aws:states:::aws-sdk:glue:startCrawler
+            Parameters:
+              Name: !Ref CleanedDataCrawler
+            Next: WaitForCrawler
+            Catch:
+              - ErrorEquals: ['States.ALL']
+                Next: RunAthenaQuery
+          WaitForCrawler:
+            Type: Wait
+            Seconds: 60
+            Next: CheckCrawlerStatus
+          CheckCrawlerStatus:
+            Type: Task
+            Resource: arn:aws:states:::aws-sdk:glue:getCrawler
+            Parameters:
+              Name: !Ref CleanedDataCrawler
+            Next: IsCrawlerComplete
+          IsCrawlerComplete:
+            Type: Choice
+            Choices:
+              - Variable: $.Crawler.State
+                StringEquals: READY
+                Next: RunAthenaQuery
+              - Variable: $.Crawler.State
+                StringEquals: RUNNING
+                Next: WaitForCrawler
+            Default: RunAthenaQuery
+          RunAthenaQuery:
+            Type: Task
+            Resource: arn:aws:states:::athena:startQueryExecution.sync
+            Parameters:
+              QueryString: |
+                SELECT 
+                    taxi_type,
+                    COUNT(*) as trip_count,
+                    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
+                FROM "taxi_pipeline_db"."taxi_merged"
+                GROUP BY taxi_type
+                ORDER BY trip_count DESC
+              WorkGroup: !Ref AthenaWorkgroup
+              ResultConfiguration:
+                OutputLocation: !Sub 's3://${AthenaResultsBucket}/aggregated-results/'
+            Next: PipelineComplete
+            Catch:
+              - ErrorEquals: ['States.ALL']
+                Next: PipelineFailed
+          PipelineComplete:
+            Type: Succeed
+          PipelineFailed:
+            Type: Fail
+            Error: PipelineError
+            Cause: One or more ETL jobs failed
+
+  #============================================================================
+  # LAMBDA FUNCTION - File Counter (Trigger when 4 files uploaded)
+  #============================================================================
+  
+  FileCounterLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${EnvironmentName}-file-counter'
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !Ref LabRoleARN
+      Timeout: 30
+      Environment:
+        Variables:
+          RAW_BUCKET: !Ref RawDataBucket
+          STATE_MACHINE_ARN: !Ref TaxiPipelineStateMachine
+          REQUIRED_FILES: '4'
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import json
+          
+          s3 = boto3.client('s3')
+          sfn = boto3.client('stepfunctions')
+          
+          def handler(event, context):
+              bucket = os.environ['RAW_BUCKET']
+              state_machine_arn = os.environ['STATE_MACHINE_ARN']
+              required_files = int(os.environ['REQUIRED_FILES'])
+              
+              # Expected folders for taxi data
+              expected_folders = ['yellow/', 'green/', 'fhv/', 'fhvhv/']
+              
+              # Count parquet files in each folder
+              files_found = 0
+              file_details = []
+              
+              for folder in expected_folders:
+                  try:
+                      response = s3.list_objects_v2(
+                          Bucket=bucket,
+                          Prefix=folder,
+                          MaxKeys=10
+                      )
+                      
+                      if 'Contents' in response:
+                          parquet_files = [obj for obj in response['Contents'] 
+                                          if obj['Key'].endswith('.parquet')]
+                          if parquet_files:
+                              files_found += 1
+                              file_details.append({
+                                  'folder': folder,
+                                  'file': parquet_files[0]['Key'],
+                                  'size': parquet_files[0]['Size']
+                              })
+                  except Exception as e:
+                      print(f"Error checking folder {folder}: {str(e)}")
+              
+              print(f"Files found: {files_found}/{required_files}")
+              print(f"File details: {json.dumps(file_details)}")
+              
+              # If all 4 files are present, trigger Step Functions
+              if files_found >= required_files:
+                  # Check if there's already a running execution
+                  try:
+                      running = sfn.list_executions(
+                          stateMachineArn=state_machine_arn,
+                          statusFilter='RUNNING',
+                          maxResults=1
+                      )
+                      
+                      if running['executions']:
+                          print("Pipeline already running, skipping trigger")
+                          return {
+                              'statusCode': 200,
+                              'body': 'Pipeline already running'
+                          }
+                  except Exception as e:
+                      print(f"Error checking executions: {str(e)}")
+                  
+                  # Start the pipeline
+                  try:
+                      response = sfn.start_execution(
+                          stateMachineArn=state_machine_arn,
+                          input=json.dumps({
+                              'trigger': 'file-counter-lambda',
+                              'files_found': files_found,
+                              'file_details': file_details
+                          })
+                      )
+                      print(f"Started execution: {response['executionArn']}")
+                      return {
+                          'statusCode': 200,
+                          'body': f"Pipeline started: {response['executionArn']}"
+                      }
+                  except Exception as e:
+                      print(f"Error starting execution: {str(e)}")
+                      return {
+                          'statusCode': 500,
+                          'body': f"Error: {str(e)}"
+                      }
+              else:
+                  print(f"Waiting for more files. Current: {files_found}/{required_files}")
+                  return {
+                      'statusCode': 200,
+                      'body': f"Waiting for files: {files_found}/{required_files}"
+                  }
+
+  # Permission for EventBridge to invoke Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref FileCounterLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt S3TriggerRule.Arn
+
+  #============================================================================
+  # EVENTBRIDGE RULE (Triggers Lambda instead of Step Functions directly)
+  #============================================================================
+  
+  S3TriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${EnvironmentName}-s3-trigger'
+      Description: Trigger Lambda to check file count when parquet files are uploaded
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref RawDataBucket
+          object:
+            key:
+              - suffix: .parquet
+      State: ENABLED
+      Targets:
+        - Id: TriggerFileCounterLambda
+          Arn: !GetAtt FileCounterLambda.Arn
+
+  #============================================================================
+  # SAGEMAKER NOTEBOOK (Using LabRole)
+  #============================================================================
+
+  # Lifecycle Configuration to auto-create notebook with analysis code
+  SageMakerLifecycleConfig:
+    Type: AWS::SageMaker::NotebookInstanceLifecycleConfig
+    Properties:
+      NotebookInstanceLifecycleConfigName: !Sub '${EnvironmentName}-lifecycle-config'
+      OnStart:
+        - Content:
+            Fn::Base64: !Sub |
+              #!/bin/bash
+              set -e
+              
+              # Create notebook directory
+              NOTEBOOK_DIR="/home/ec2-user/SageMaker"
+              
+              # Create the analysis notebook
+              cat > "$NOTEBOOK_DIR/NYC_Taxi_Analysis.ipynb" << 'NOTEBOOK_EOF'
+              {
+               "cells": [
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "# 🚕 NYC Taxi Data Analysis\n",
+                  "**AWS Data Pipeline Results - January 2024**\n",
+                  "\n",
+                  "This notebook queries the cleaned and aggregated taxi data from Amazon Athena."
+                 ]
+                },
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "## 1. Setup & Install Dependencies"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# Install required packages\n",
+                  "!pip install pyathena pandas matplotlib seaborn -q\n",
+                  "print('✅ Packages installed!')"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# Import libraries\n",
+                  "import boto3\n",
+                  "import pandas as pd\n",
+                  "import matplotlib.pyplot as plt\n",
+                  "import seaborn as sns\n",
+                  "from pyathena import connect\n",
+                  "from pyathena.pandas.cursor import PandasCursor\n",
+                  "import warnings\n",
+                  "warnings.filterwarnings('ignore')\n",
+                  "\n",
+                  "pd.set_option('display.max_columns', None)\n",
+                  "pd.set_option('display.float_format', '{:,.2f}'.format)\n",
+                  "print('✅ Libraries imported!')"
+                 ]
+                },
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "## 2. Configure Athena Connection"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# Configuration\n",
+                  "REGION = '${AWS::Region}'\n",
+                  "DATABASE = 'taxi_pipeline_db'\n",
+                  "WORKGROUP = '${EnvironmentName}-workgroup'\n",
+                  "ACCOUNT_ID = boto3.client('sts').get_caller_identity()['Account']\n",
+                  "S3_OUTPUT = f's3://${EnvironmentName}-athena-results-{ACCOUNT_ID}/notebook-results/'\n",
+                  "\n",
+                  "# Create Athena connection\n",
+                  "conn = connect(\n",
+                  "    s3_staging_dir=S3_OUTPUT,\n",
+                  "    region_name=REGION,\n",
+                  "    work_group=WORKGROUP,\n",
+                  "    cursor_class=PandasCursor\n",
+                  ")\n",
+                  "print(f'✅ Connected to Athena')\n",
+                  "print(f'   Database: {DATABASE}')\n",
+                  "print(f'   Workgroup: {WORKGROUP}')"
+                 ]
+                },
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "## 3. Explore Tables"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# List tables\n",
+                  "tables_df = pd.read_sql(f'SHOW TABLES IN {DATABASE}', conn)\n",
+                  "print('📋 Available Tables:')\n",
+                  "display(tables_df)"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# Sample data\n",
+                  "query = f'SELECT * FROM {DATABASE}.taxi_merged LIMIT 10'\n",
+                  "sample_df = pd.read_sql(query, conn)\n",
+                  "print('🔍 Sample Data:')\n",
+                  "display(sample_df)"
+                 ]
+                },
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "## 4. 📊 Trip Count Analysis by Taxi Type"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# Main analysis - Trip counts by taxi type\n",
+                  "query = f'''\n",
+                  "SELECT \n",
+                  "    taxi_type,\n",
+                  "    COUNT(*) as trip_count,\n",
+                  "    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage\n",
+                  "FROM {DATABASE}.taxi_merged\n",
+                  "GROUP BY taxi_type\n",
+                  "ORDER BY trip_count DESC\n",
+                  "'''\n",
+                  "\n",
+                  "trip_counts = pd.read_sql(query, conn)\n",
+                  "trip_counts['rank'] = range(1, len(trip_counts) + 1)\n",
+                  "trip_counts = trip_counts[['rank', 'taxi_type', 'trip_count', 'percentage']]\n",
+                  "\n",
+                  "print('🏆 TRIP COUNTS BY TAXI TYPE (January 2024)')\n",
+                  "print('=' * 60)\n",
+                  "display(trip_counts)\n",
+                  "\n",
+                  "total_trips = trip_counts['trip_count'].sum()\n",
+                  "top_type = trip_counts.iloc[0]['taxi_type']\n",
+                  "top_count = trip_counts.iloc[0]['trip_count']\n",
+                  "top_pct = trip_counts.iloc[0]['percentage']\n",
+                  "\n",
+                  "print(f'\\n📈 Total trips: {total_trips:,}')\n",
+                  "print(f'🥇 Top Taxi Type: {top_type} with {top_count:,} trips ({top_pct}%)')"
+                 ]
+                },
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "## 5. 📊 Bar Chart Visualization"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# Bar chart\n",
+                  "plt.figure(figsize=(12, 8))\n",
+                  "colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']\n",
+                  "bars = plt.bar(trip_counts['taxi_type'], trip_counts['trip_count'], color=colors[:len(trip_counts)])\n",
+                  "\n",
+                  "for i, bar in enumerate(bars):\n",
+                  "    height = bar.get_height()\n",
+                  "    plt.text(bar.get_x() + bar.get_width()/2., height + height*0.01,\n",
+                  "             f'{int(height):,}', ha='center', va='bottom', fontweight='bold', fontsize=12)\n",
+                  "    plt.text(bar.get_x() + bar.get_width()/2., height/2,\n",
+                  "             f'{trip_counts.iloc[i][\"percentage\"]}%', ha='center', va='center',\n",
+                  "             color='white', fontweight='bold', fontsize=14)\n",
+                  "\n",
+                  "plt.title('NYC Taxi Trip Counts by Type (January 2024)', fontsize=16, fontweight='bold', pad=20)\n",
+                  "plt.xlabel('Taxi Type', fontsize=12, fontweight='bold')\n",
+                  "plt.ylabel('Number of Trips', fontsize=12, fontweight='bold')\n",
+                  "plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))\n",
+                  "plt.grid(axis='y', alpha=0.3, linestyle='--')\n",
+                  "plt.tight_layout()\n",
+                  "plt.show()"
+                 ]
+                },
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "## 6. 🥧 Pie Chart Visualization"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "# Pie chart\n",
+                  "plt.figure(figsize=(10, 10))\n",
+                  "colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']\n",
+                  "explode = [0.05 if i == 0 else 0 for i in range(len(trip_counts))]\n",
+                  "\n",
+                  "plt.pie(trip_counts['trip_count'], \n",
+                  "        labels=trip_counts['taxi_type'],\n",
+                  "        autopct=lambda pct: f'{pct:.1f}%\\n({int(pct/100*total_trips):,})',\n",
+                  "        colors=colors[:len(trip_counts)],\n",
+                  "        explode=explode,\n",
+                  "        shadow=True,\n",
+                  "        startangle=90,\n",
+                  "        textprops={'fontsize': 12, 'fontweight': 'bold'})\n",
+                  "\n",
+                  "plt.title('NYC Taxi Market Share by Type (January 2024)', fontsize=16, fontweight='bold', pad=20)\n",
+                  "plt.axis('equal')\n",
+                  "plt.tight_layout()\n",
+                  "plt.show()"
+                 ]
+                },
+                {
+                 "cell_type": "markdown",
+                 "metadata": {},
+                 "source": [
+                  "## 7. 🏁 Final Summary"
+                 ]
+                },
+                {
+                 "cell_type": "code",
+                 "execution_count": null,
+                 "metadata": {},
+                 "outputs": [],
+                 "source": [
+                  "print('\\n' + '=' * 80)\n",
+                  "print('🏁 FINAL ANALYSIS REPORT - NYC TAXI DATA (JANUARY 2024)')\n",
+                  "print('=' * 80)\n",
+                  "print(f'\\n📊 Dataset Information:')\n",
+                  "print(f'   • Data Source: NYC TLC Trip Record Data')\n",
+                  "print(f'   • Analysis Period: January 1-31, 2024')\n",
+                  "print(f'   • Total Records: {total_trips:,}')\n",
+                  "print(f'   • Number of Taxi Types: {len(trip_counts)}')\n",
+                  "print(f'\\n🔧 Data Pipeline:')\n",
+                  "print(f'   • Storage: Amazon S3')\n",
+                  "print(f'   • ETL: AWS Glue')\n",
+                  "print(f'   • Orchestration: AWS Step Functions')\n",
+                  "print(f'   • Query Engine: Amazon Athena')\n",
+                  "print(f'   • Analytics: Amazon SageMaker')\n",
+                  "print(f'\\n🏆 COMPLETE RANKING:')\n",
+                  "print('-' * 60)\n",
+                  "for _, row in trip_counts.iterrows():\n",
+                  "    print(f'   {int(row[\"rank\"])}. {row[\"taxi_type\"]}: {int(row[\"trip_count\"]):,} trips ({row[\"percentage\"]}%)')\n",
+                  "print(f'\\n' + '=' * 80)\n",
+                  "print(f'🥇 ANSWER: Top Taxi Type = {top_type} with {top_count:,} rides ({top_pct}%)')\n",
+                  "print('=' * 80)\n",
+                  "\n",
+                  "# Close connection\n",
+                  "conn.close()\n",
+                  "print('\\n✅ Analysis complete!')"
+                 ]
+                }
+               ],
+               "metadata": {
+                "kernelspec": {
+                 "display_name": "conda_python3",
+                 "language": "python",
+                 "name": "conda_python3"
+                },
+                "language_info": {
+                 "name": "python",
+                 "version": "3.10.0"
+                }
+               },
+               "nbformat": 4,
+               "nbformat_minor": 4
+              }
+              NOTEBOOK_EOF
+              
+              # Set correct permissions
+              chown ec2-user:ec2-user "$NOTEBOOK_DIR/NYC_Taxi_Analysis.ipynb"
+              chmod 644 "$NOTEBOOK_DIR/NYC_Taxi_Analysis.ipynb"
+              
+              echo "✅ Notebook created successfully!"
+  
+  SageMakerNotebook:
+    Type: AWS::SageMaker::NotebookInstance
+    DependsOn: SageMakerLifecycleConfig
+    Properties:
+      NotebookInstanceName: !Sub '${EnvironmentName}-analytics-notebook'
+      InstanceType: ml.t3.medium
+      RoleArn: !Ref LabRoleARN
+      DirectInternetAccess: Enabled
+      VolumeSizeInGB: 20
+      LifecycleConfigName: !Sub '${EnvironmentName}-lifecycle-config'
+
+#============================================================================
+# OUTPUTS
+#============================================================================
+
+Outputs:
+  RawDataBucketName:
+    Description: S3 bucket for raw data ingestion
+    Value: !Ref RawDataBucket
+    Export:
+      Name: !Sub '${EnvironmentName}-RawDataBucket'
+
+  CleanedDataBucketName:
+    Description: S3 bucket for cleaned data
+    Value: !Ref CleanedDataBucket
+    Export:
+      Name: !Sub '${EnvironmentName}-CleanedDataBucket'
+
+  AthenaResultsBucketName:
+    Description: S3 bucket for Athena query results
+    Value: !Ref AthenaResultsBucket
+    Export:
+      Name: !Sub '${EnvironmentName}-AthenaResultsBucket'
+
+  GlueScriptsBucketName:
+    Description: S3 bucket for Glue scripts
+    Value: !Ref GlueScriptsBucket
+    Export:
+      Name: !Sub '${EnvironmentName}-GlueScriptsBucket'
+
+  GlueDatabaseName:
+    Description: Glue Data Catalog database name
+    Value: !Ref TaxiDatabase
+    Export:
+      Name: !Sub '${EnvironmentName}-GlueDatabase'
+
+  StepFunctionsArn:
+    Description: Step Functions State Machine ARN
+    Value: !Ref TaxiPipelineStateMachine
+    Export:
+      Name: !Sub '${EnvironmentName}-StateMachine'
+
+  AthenaWorkgroupName:
+    Description: Athena Workgroup name
+    Value: !Ref AthenaWorkgroup
+    Export:
+      Name: !Sub '${EnvironmentName}-AthenaWorkgroup'
+
+  SageMakerNotebookName:
+    Description: SageMaker Notebook instance name
+    Value: !Ref SageMakerNotebook
+    Export:
+      Name: !Sub '${EnvironmentName}-SageMakerNotebook'
+
+  DataIngestionCommand:
+    Description: AWS CLI command to upload data to S3
+    Value: !Sub |
+      # Download and upload Yellow Taxi data ;
+      curl -o yellow_tripdata_2024-01.parquet https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet ;
+      aws s3 cp yellow_tripdata_2024-01.parquet s3://${RawDataBucket}/yellow/ ;
+      
+      # Download and upload Green Taxi data  ;
+      curl -o green_tripdata_2024-01.parquet https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_2024-01.parquet ;
+      aws s3 cp green_tripdata_2024-01.parquet s3://${RawDataBucket}/green/ ;
+      
+      # Download and upload FHV data ;
+      curl -o fhv_tripdata_2024-01.parquet https://d37ci6vzurychx.cloudfront.net/trip-data/fhv_tripdata_2024-01.parquet ;
+      aws s3 cp fhv_tripdata_2024-01.parquet s3://${RawDataBucket}/fhv/ ;
+      
+      # Download and upload FHVHV data ;
+      curl -o fhvhv_tripdata_2024-01.parquet https://d37ci6vzurychx.cloudfront.net/trip-data/fhvhv_tripdata_2024-01.parquet ;
+      aws s3 cp fhvhv_tripdata_2024-01.parquet s3://${RawDataBucket}/fhvhv/ ;
