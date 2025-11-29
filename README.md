@@ -20,6 +20,7 @@
 - [Deployment Guide](#-deployment-guide)
 - [Pipeline Execution](#-pipeline-execution)
 - [Data Analysis](#-data-analysis)
+- [Demo & Actual Results](#-demo--actual-results)
 - [Monitoring & Troubleshooting](#-monitoring--troubleshooting)
 - [Cost Optimization](#-cost-optimization)
 - [Cleanup](#-cleanup)
@@ -545,9 +546,11 @@ ORDER BY trip_count DESC;
 
 ### 📹 Demo Video
 
-[![Demo Video](https://img.shields.io/badge/▶️_Watch_Demo-Pipeline_Execution-red?style=for-the-badge&logo=youtube)](https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4)
+<video src="https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4" controls="controls" style="max-width: 100%;">
+  Your browser does not support the video tag.
+</video>
 
-**Demo Video:** [https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4](https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4)
+> 📎 **Direct Link:** [https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4](https://static2.petchsko123.dpdns.org/cs341/minilab-taxi/minilab-lastpipeline-6609681231.mp4)
 
 ### 📊 Actual Pipeline Results (28 September Run)
 
