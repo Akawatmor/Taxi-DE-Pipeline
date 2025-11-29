@@ -67,120 +67,120 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              AWS CLOUD                                       │
-│                                                                              │
+│                              AWS CLOUD                                      │
+│                                                                             │
 │  ┌──────────────┐                                                           │
 │  │  Data Source │  NYC TLC Trip Record Data (Parquet Files)                 │
 │  │  (External)  │  https://d37ci6vzurychx.cloudfront.net/trip-data/         │
 │  └──────┬───────┘                                                           │
 │         │ aws s3 cp                                                         │
-│         ▼                                                                   │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                        INGESTION LAYER                                │  │
-│  │  ┌─────────────────┐     ┌─────────────────┐     ┌────────────────┐  │  │
-│  │  │   Amazon S3     │────▶│ Amazon Lambda   │────▶│ EventBridge    │  │  │
-│  │  │   (Raw Data)    │     │ (File Counter)  │     │ (Trigger)      │  │  │
-│  │  │                 │     │                 │     │                │  │  │
-│  │  │ /yellow/*.parq  │     │ Count files     │     │ When 4 files   │  │  │
-│  │  │ /green/*.parq   │     │ in bucket       │     │ are uploaded   │  │  │
-│  │  │ /fhv/*.parq     │     │                 │     │ trigger Step   │  │  │
-│  │  │ /fhvhv/*.parq   │     │                 │     │ Functions      │  │  │
-│  │  └─────────────────┘     └─────────────────┘     └───────┬────────┘  │  │
-│  └──────────────────────────────────────────────────────────┼───────────┘  │
-│                                                              │              │
-│                                                              ▼              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                     PROCESSING LAYER (Step Functions)                 │  │
-│  │                                                                       │  │
-│  │  ┌─────────────────────────────────────────────────────────────────┐ │  │
-│  │  │              PARALLEL GLUE ETL JOBS                             │ │  │
-│  │  │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────────┐   │ │  │
-│  │  │  │  Yellow   │ │   Green   │ │    FHV    │ │     FHVHV     │   │ │  │
-│  │  │  │  Taxi ETL │ │  Taxi ETL │ │    ETL    │ │      ETL      │   │ │  │
-│  │  │  │           │ │           │ │           │ │               │   │ │  │
-│  │  │  │ • Remove  │ │ • Remove  │ │ • Remove  │ │ • Remove      │   │ │  │
-│  │  │  │   dupes   │ │   dupes   │ │   dupes   │ │   dupes       │   │ │  │
-│  │  │  │ • Filter  │ │ • Filter  │ │ • Filter  │ │ • Filter      │   │ │  │
-│  │  │  │   dates   │ │   dates   │ │   dates   │ │   dates       │   │ │  │
-│  │  │  │ • Remove  │ │ • Remove  │ │ • Remove  │ │ • Remove      │   │ │  │
-│  │  │  │   nulls   │ │   nulls   │ │   nulls   │ │   nulls       │   │ │  │
-│  │  │  │ • Remove  │ │ • Remove  │ │ • Standard│ │ • Remove      │   │ │  │
-│  │  │  │  outliers │ │  outliers │ │   columns │ │   outliers    │   │ │  │
-│  │  │  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └───────┬───────┘   │ │  │
-│  │  └────────┼─────────────┼─────────────┼───────────────┼───────────┘ │  │
-│  │           │             │             │               │             │  │
-│  │           └─────────────┴──────┬──────┴───────────────┘             │  │
-│  │                                ▼                                     │  │
-│  │                    ┌───────────────────┐                            │  │
-│  │                    │    Merge ETL      │                            │  │
-│  │                    │                   │                            │  │
-│  │                    │ Union all 4 types │                            │  │
-│  │                    │ Add taxi_type col │                            │  │
-│  │                    │ Standardize cols  │                            │  │
-│  │                    └─────────┬─────────┘                            │  │
-│  │                              │                                       │  │
-│  │                              ▼                                       │  │
-│  │                    ┌───────────────────┐                            │  │
-│  │                    │   Glue Crawler    │                            │  │
-│  │                    │                   │                            │  │
-│  │                    │ Catalog merged    │                            │  │
-│  │                    │ data to Glue      │                            │  │
-│  │                    │ Data Catalog      │                            │  │
-│  │                    └─────────┬─────────┘                            │  │
-│  │                              │                                       │  │
-│  │                              ▼                                       │  │
-│  │                    ┌───────────────────┐                            │  │
-│  │                    │   Athena Query    │                            │  │
-│  │                    │                   │                            │  │
-│  │                    │ SELECT taxi_type, │                            │  │
-│  │                    │   COUNT(*) ...    │                            │  │
-│  │                    │ GROUP BY taxi_type│                            │  │
-│  │                    └───────────────────┘                            │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│         V                                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                        INGESTION LAYER                               │   │
+│  │  ┌─────────────────┐     ┌─────────────────┐     ┌────────────────┐  │   │
+│  │  │   Amazon S3     │────>│ Amazon Lambda   │────>│ EventBridge    │  │   │
+│  │  │   (Raw Data)    │     │ (File Counter)  │     │ (Trigger)      │  │   │
+│  │  │                 │     │                 │     │                │  │   │
+│  │  │ /yellow/*.parq  │     │ Count files     │     │ When 4 files   │  │   │
+│  │  │ /green/*.parq   │     │ in bucket       │     │ are uploaded   │  │   │
+│  │  │ /fhv/*.parq     │     │                 │     │ trigger Step   │  │   │
+│  │  │ /fhvhv/*.parq   │     │                 │     │ Functions      │  │   │
+│  │  └─────────────────┘     └─────────────────┘     └───────┬────────┘  │   │
+│  └──────────────────────────────────────────────────────────┼───────────┘   │
+│                                                             │               │
+│                                                             V               │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                     PROCESSING LAYER (Step Functions)                │   │
+│  │                                                                      │   │
+│  │  ┌─────────────────────────────────────────────────────────────────┐ │   │
+│  │  │              PARALLEL GLUE ETL JOBS                             │ │   │
+│  │  │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────────┐    │ │   │
+│  │  │  │  Yellow   │ │   Green   │ │    FHV    │ │     FHVHV     │    │ │   │
+│  │  │  │  Taxi ETL │ │  Taxi ETL │ │    ETL    │ │      ETL      │    │ │   │
+│  │  │  │           │ │           │ │           │ │               │    │ │   │
+│  │  │  │ • Remove  │ │ • Remove  │ │ • Remove  │ │ • Remove      │    │ │   │
+│  │  │  │   dupes   │ │   dupes   │ │   dupes   │ │   dupes       │    │ │   │
+│  │  │  │ • Filter  │ │ • Filter  │ │ • Filter  │ │ • Filter      │    │ │   │
+│  │  │  │   dates   │ │   dates   │ │   dates   │ │   dates       │    │ │   │
+│  │  │  │ • Remove  │ │ • Remove  │ │ • Remove  │ │ • Remove      │    │ │   │
+│  │  │  │   nulls   │ │   nulls   │ │   nulls   │ │   nulls       │    │ │   │
+│  │  │  │ • Remove  │ │ • Remove  │ │ • Standard│ │ • Remove      │    │ │   │
+│  │  │  │  outliers │ │  outliers │ │   columns │ │   outliers    │    │ │   │
+│  │  │  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └───────┬───────┘    │ │   │
+│  │  └────────┼─────────────┼─────────────┼───────────────┼────────────┘ │   │
+│  │           │             │             │               │              │   │
+│  │           └─────────────┴────┬────────┴───────────────┘              │   │
+│  │                              V                                       │   │
+│  │                    ┌───────────────────┐                             │   │
+│  │                    │    Merge ETL      │                             │   │
+│  │                    │                   │                             │   │
+│  │                    │ Union all 4 types │                             │   │
+│  │                    │ Add taxi_type col │                             │   │
+│  │                    │ Standardize cols  │                             │   │
+│  │                    └─────────┬─────────┘                             │   │
+│  │                              │                                       │   │
+│  │                              V                                       │   │
+│  │                    ┌───────────────────┐                             │   │
+│  │                    │   Glue Crawler    │                             │   │
+│  │                    │                   │                             │   │
+│  │                    │ Catalog merged    │                             │   │
+│  │                    │ data to Glue      │                             │   │
+│  │                    │ Data Catalog      │                             │   │
+│  │                    └─────────┬─────────┘                             │   │
+│  │                              │                                       │   │
+│  │                              V                                       │   │
+│  │                    ┌───────────────────┐                             │   │
+│  │                    │   Athena Query    │                             │   │
+│  │                    │                   │                             │   │
+│  │                    │ SELECT taxi_type, │                             │   │
+│  │                    │   COUNT(*) ...    │                             │   │
+│  │                    │ GROUP BY taxi_type│                             │   │
+│  │                    └───────────────────┘                             │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                        STORAGE LAYER                                  │  │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐   │  │
-│  │  │   Amazon S3     │  │   Amazon S3     │  │   Amazon S3         │   │  │
-│  │  │  (Cleaned Data) │  │ (Athena Results)│  │  (Glue Scripts)     │   │  │
-│  │  │                 │  │                 │  │                     │   │  │
-│  │  │ /cleaned/       │  │ /results/       │  │ *.py ETL scripts    │   │  │
-│  │  │   yellow/       │  │                 │  │                     │   │  │
-│  │  │   green/        │  │                 │  │                     │   │  │
-│  │  │   fhv/          │  │                 │  │                     │   │  │
-│  │  │   fhvhv/        │  │                 │  │                     │   │  │
-│  │  │   merged/       │  │                 │  │                     │   │  │
-│  │  └─────────────────┘  └─────────────────┘  └─────────────────────┘   │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────┐    │  │
+│  │  │   Amazon S3     │  │   Amazon S3     │  │   Amazon S3         │    │  │
+│  │  │  (Cleaned Data) │  │ (Athena Results)│  │  (Glue Scripts)     │    │  │
+│  │  │                 │  │                 │  │                     │    │  │
+│  │  │ /cleaned/       │  │ /results/       │  │ *.py ETL scripts    │    │  │
+│  │  │   yellow/       │  │                 │  │                     │    │  │
+│  │  │   green/        │  │                 │  │                     │    │  │
+│  │  │   fhv/          │  │                 │  │                     │    │  │
+│  │  │   fhvhv/        │  │                 │  │                     │    │  │
+│  │  │   merged/       │  │                 │  │                     │    │  │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────────┘    │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                       ANALYTICS LAYER                                 │  │
-│  │  ┌──────────────────────────────────────────────────────────────┐    │  │
-│  │  │                    AWS SageMaker Notebook                     │    │  │
-│  │  │  ┌────────────────────────────────────────────────────────┐  │    │  │
-│  │  │  │  NYC_Taxi_Analysis.ipynb (Auto-created)                │  │    │  │
-│  │  │  │                                                         │  │    │  │
-│  │  │  │  • Connect to Athena via PyAthena                      │  │    │  │
-│  │  │  │  • Query taxi_pipeline_db.taxi_merged                  │  │    │  │
-│  │  │  │  • Generate Bar Chart & Pie Chart                      │  │    │  │
-│  │  │  │  • Display final ranking results                       │  │    │  │
-│  │  │  └────────────────────────────────────────────────────────┘  │    │  │
-│  │  └──────────────────────────────────────────────────────────────┘    │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+│  │  ┌──────────────────────────────────────────────────────────────┐     │  │
+│  │  │                    AWS SageMaker Notebook                    │     │  │
+│  │  │  ┌────────────────────────────────────────────────────────┐  │     │  │
+│  │  │  │  NYC_Taxi_Analysis.ipynb (Auto-created)                │  │     │  │
+│  │  │  │                                                        │  │     │  │
+│  │  │  │  • Connect to Athena via PyAthena                      │  │     │  │
+│  │  │  │  • Query taxi_pipeline_db.taxi_merged                  │  │     │  │
+│  │  │  │  • Generate Bar Chart & Pie Chart                      │  │     │  │
+│  │  │  │  • Display final ranking results                       │  │     │  │
+│  │  │  └────────────────────────────────────────────────────────┘  │     │  │
+│  │  └──────────────────────────────────────────────────────────────┘     │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow Sequence
 
 ```
-1️⃣ INGEST    →  2️⃣ TRIGGER   →  3️⃣ CLEAN     →  4️⃣ MERGE     →  5️⃣ CATALOG   →  6️⃣ QUERY     →  7️⃣ ANALYZE
+1. INGEST    →   2. TRIGGER  →   3. CLEAN    →   4. MERGE    →  5 CATALOG   →  6. QUERY     →  7. ANALYZE
    ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Upload 4      Lambda        Glue ETL       Glue ETL       Glue          Athena         SageMaker
-   parquet       counts        (parallel)     (merge)        Crawler       Query          Notebook
-   files         files,        clean each     union all      create        aggregate      visualize
-   to S3         trigger       taxi type      4 types        table         by type        results
-                 if = 4
+   Upload 4        Lambda          Glue ETL        Glue ETL       Glue            Athena          SageMaker
+   parquet         counts          (parallel)      (merge)        Crawler         Query           Notebook
+   files           files,          clean each      union all      create          aggregate       visualize
+   to S3           trigger         taxi type       4 types        table           by type         results
+                   if = 4
 ```
 
 ### ภาพ Architecture โดยรวม
